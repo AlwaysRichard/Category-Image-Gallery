@@ -86,18 +86,33 @@ All thumbnail interactions open images in a beautiful, full-screen lightbox that
 Use the `display_meta` attribute to show camera information and other metadata:
 
 ```text
-display_meta="{Camera} • {Lens} • f/{FNumber} • {ShutterSpeed}s • ISO {ISO}"
+display_meta="{Camera} | {Lens} | f/{FNumber} | {ShutterSpeed} | ISO {ISO}"
 ```
 
 **Available metadata tokens:**
-- `{Camera}` — Camera make and model
-- `{Lens}` — Lens information  
-- `{FNumber}` — Aperture (f-stop)
-- `{ShutterSpeed}` — Shutter speed
-- `{ISO}` — ISO sensitivity
-- `{FocalLength}` — Focal length
-- `{Copyright}` — Copyright information
 - `{FileName}` — Original filename
+- `{CameraMake}` — Camera manufacturer (e.g., "NIKON CORPORATION")
+- `{CameraModel}` — Camera model (e.g., "NIKON D810")
+- `{Camera}` — Combined camera make and model
+- `{LensManufacturer}` — Lens manufacturer
+- `{LensModel}` — Lens model
+- `{Lens}` — Combined lens information
+- `{FocalLength}` — Focal length in mm (e.g., "38mm" from 380/10)
+- `{FNumber}` — Aperture as f-stop (e.g., "f/8" from 8/1)
+- `{ShutterSpeedValue}` — Shutter speed as fraction (e.g., "1/160s" from 7321928/1000000)
+- `{ISOSpeedRatings}` — ISO sensitivity (e.g., "ISO 100")
+- `{DateTimeOriginal}` — Original capture date/time
+- `{GPSLatitude}` — GPS latitude in degrees/minutes/seconds (e.g., "37° 13′ 0″")
+- `{GPSLongitude}` — GPS longitude in degrees/minutes/seconds (e.g., "112° 59′ 0″")
+- `{Copyright}` — Copyright information with optional default: `{Copyright,John Doe}`
+
+**Default Value Syntax:**
+You can specify default values for any metadata token using the format `{Token,Default Value}`. If the EXIF data doesn't contain that field, the default value will be used instead.
+
+Examples:
+- `{Copyright,© 2025 Your Name}` — Shows "© 2025 Your Name" if no copyright in EXIF
+- `{LensModel,Unknown Lens}` — Shows "Unknown Lens" if lens information is missing
+- `{GPSLatitude,Location Unknown}` — Shows "Location Unknown" if no GPS data
 
 ### Category Hierarchy
 The plugin now automatically includes images from **all descendant categories** (children, grandchildren, etc.) when you specify a parent category, giving you comprehensive category-based galleries.
@@ -105,10 +120,25 @@ The plugin now automatically includes images from **all descendant categories** 
 ---
 
 ## 📸 Screenshots
-Screenshots using the following slug.
 
+The following screenshots demonstrate the plugin's tiled layout and lightbox functionality using a US National Parks gallery.
+
+**Example shortcode configuration:**
 ```text
-[category_image_gallery category_slug="us-national-parks" layout="tiled" row_height="230" tolerance="0.30" panorama_thresh="2.6" min_per_row="1" max_per_row="3" last_row="left" gutter="4" v_gutter="4" include_draft="true" click_menu="true" display_meta="{FocalLength} | {FNumber} | {ShutterSpeedValue} | {ISOSpeedRatings} -- {Copyright,Richard Cox}"]
+[category_image_gallery 
+  category_slug="us-national-parks" 
+  layout="tiled" 
+  row_height="230" 
+  tolerance="0.30" 
+  panorama_thresh="2.6" 
+  min_per_row="1" 
+  max_per_row="3" 
+  last_row="left" 
+  gutter="4" 
+  v_gutter="4" 
+  include_draft="true" 
+  click_menu="true" 
+  display_meta="{FocalLength} | {FNumber} | {ShutterSpeedValue} | {ISOSpeedRatings} -- {Copyright,Richard Cox}"]
 ```
 
 ### Tiled Gallery View

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: AP Category Image Gallery
  * Description: Category-based image galleries. Layouts: tiled (Jetpack-like justified), grid, masonry, collage (metro). Selects images only from posts in a given category. Supports per_row/cols, gutter, max, cycle, include_draft, click_menu, mode (post|attachment), crop toggle, and advanced tiled tuning.
- * Version:     1.8.0
+ * Version:     2.1.0
  * Author:      AlwaysPhotographing
  * Text Domain: ap-category-image-gallery
  */
@@ -75,25 +75,185 @@ class AP_Category_Image_Gallery {
   position:absolute; bottom:10px; left:10px; min-width:160px;
   background:#fff; border:1px solid rgba(0,0,0,.12);
   box-shadow:0 8px 24px rgba(0,0,0,.18);
-  border-radius:10px; padding:6px; display:none; z-index:4
+  border-radius:10px; padding:8px 12px; display:none; z-index:4;
+  font-size:14px; line-height:1.5;
 }
-.ap-gallery__menu a{display:block; padding:8px 10px; color:#111; text-decoration:none}
-.ap-gallery__menu a:hover{background:#f2f2f2}
+.ap-gallery__menu-label{display:inline; color:#666; font-weight:500; margin-right:8px}
+.ap-gallery__menu a{display:inline; padding:0; color:#2271b1; text-decoration:none; font-weight:500}
+.ap-gallery__menu a:hover{text-decoration:underline}
+.ap-gallery__menu button{display:inline; padding:0; color:#2271b1; background:none; border:none; font:inherit; cursor:pointer; text-decoration:none; font-weight:500}
+.ap-gallery__menu button:hover{text-decoration:underline}
+.ap-gallery__menu-sep{display:inline; color:#999; margin:0 6px}
 .ap-gallery__item:hover .ap-gallery__menu-toggle{cursor:pointer}
 .ap-gallery__item:focus-within .ap-gallery__menu{display:block}
 .ap-gallery__menu.is-open{display:block}
+
+/* Lightbox for full-image viewing */
+.ap-lightbox{
+  position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:9999;
+  display:none; align-items:center; justify-content:center; flex-direction:column;
+}
+.ap-lightbox.is-open{display:flex}
+.ap-lightbox__img{max-width:90vw; max-height:80vh; object-fit:contain}
+.ap-lightbox__caption{
+  color:#fff; text-align:center; margin-top:15px; font-size:16px;
+  max-width:90vw; padding:0 20px; line-height:1.5;
+  font-family: 'Courier New', Courier, monospace;
+}
+.ap-lightbox__close{
+  position:absolute; top:60px; right:20px;
+  width:40px; height:40px; border:none; background:#fff;
+  border-radius:50%; cursor:pointer; font-size:24px; line-height:1;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 2px 8px rgba(0,0,0,0.3);
+}
+.ap-lightbox__close:hover{background:#f0f0f0}
+.ap-lightbox__nav{
+  position:absolute; bottom:20px; right:20px;
+  display:flex; gap:10px;
+}
+.ap-lightbox__nav button{
+  width:50px; height:50px; border:none; background:#fff;
+  border-radius:8px; cursor:pointer; font-size:18px; font-weight:bold;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 2px 8px rgba(0,0,0,0.3);
+}
+.ap-lightbox__nav button:hover{background:#f0f0f0}
+.ap-lightbox__nav button:disabled{opacity:0.4; cursor:not-allowed}
 CSS;
 
-        wp_register_style( self::HANDLE, false, [], '1.8.0' );
+        wp_register_style( self::HANDLE, false, [], '2.1.0' );
         wp_add_inline_style( self::HANDLE, $css );
         wp_enqueue_style( self::HANDLE );
 
         // --- JS (click menu + tiled + collage sizing) ---
         $js = <<<JS
 (function(){
+  // ----- Lightbox for image viewing -----
+  var lightboxHTML = '<div class="ap-lightbox" id="ap-lightbox">' +
+    '<button class="ap-lightbox__close" aria-label="Close">&times;</button>' +
+    '<img class="ap-lightbox__img" src="" alt="" />' +
+    '<div class="ap-lightbox__caption"></div>' +
+    '<div class="ap-lightbox__nav">' +
+      '<button class="ap-lightbox__prev" aria-label="Previous">&larr;</button>' +
+      '<button class="ap-lightbox__next" aria-label="Next">&rarr;</button>' +
+    '</div>' +
+  '</div>';
+  
+  // Insert lightbox once into body
+  if (!document.getElementById('ap-lightbox')) {
+    document.body.insertAdjacentHTML('beforeend', lightboxHTML);
+  }
+  
+  var lightbox = document.getElementById('ap-lightbox');
+  var lightboxImg = lightbox.querySelector('.ap-lightbox__img');
+  var lightboxCaption = lightbox.querySelector('.ap-lightbox__caption');
+  var closeBtn = lightbox.querySelector('.ap-lightbox__close');
+  var prevBtn = lightbox.querySelector('.ap-lightbox__prev');
+  var nextBtn = lightbox.querySelector('.ap-lightbox__next');
+  var currentGallery = null;
+  var currentIndex = 0;
+  
+  function openLightbox(gallery, index) {
+    currentGallery = gallery;
+    currentIndex = index;
+    updateLightboxImage();
+    lightbox.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+  }
+  
+  function closeLightbox() {
+    lightbox.classList.remove('is-open');
+    document.body.style.overflow = '';
+    currentGallery = null;
+  }
+  
+  function updateLightboxImage() {
+    if (!currentGallery) return;
+    var items = Array.prototype.slice.call(currentGallery.querySelectorAll('.ap-gallery__item'));
+    if (currentIndex < 0) currentIndex = items.length - 1;
+    if (currentIndex >= items.length) currentIndex = 0;
+    
+    var currentItem = items[currentIndex];
+    var img = currentItem.querySelector('img');
+    if (img) {
+      var link = currentItem.querySelector('a.ap-gallery__link');
+      // Always use the data-full-image attribute for the lightbox source
+      var src = link ? link.getAttribute('data-full-image') : img.src;
+      lightboxImg.src = src || img.src;
+      lightboxImg.alt = img.alt;
+      
+      // Get caption from data attribute
+      var caption = currentItem.getAttribute('data-caption') || '';
+      lightboxCaption.textContent = caption;
+    }
+    
+    prevBtn.disabled = (items.length <= 1);
+    nextBtn.disabled = (items.length <= 1);
+  }
+  
+  function navigate(direction) {
+    currentIndex += direction;
+    updateLightboxImage();
+  }
+  
+  // Event listeners
+  closeBtn.addEventListener('click', closeLightbox);
+  prevBtn.addEventListener('click', function() { navigate(-1); });
+  nextBtn.addEventListener('click', function() { navigate(1); });
+  
+  // Close on background click
+  lightbox.addEventListener('click', function(e) {
+    if (e.target === lightbox) closeLightbox();
+  });
+  
+  // Close on Escape key
+  document.addEventListener('keydown', function(e) {
+    if (!lightbox.classList.contains('is-open')) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') navigate(-1);
+    if (e.key === 'ArrowRight') navigate(1);
+  });
+  
+  // Attach lightbox to image links (use capture phase to ensure we catch it first)
+  document.addEventListener('click', function(e) {
+    var link = e.target.closest('a.ap-gallery__link');
+    if (!link) return;
+    
+    var gallery = link.closest('.ap-gallery');
+    if (!gallery) return;
+    
+    // Check if this gallery has the lightbox marker attribute
+    if (!gallery.hasAttribute('data-lightbox')) return;
+    
+    // Always prevent default for gallery links - they should open in lightbox
+    e.preventDefault();
+    e.stopPropagation();
+    var items = Array.prototype.slice.call(gallery.querySelectorAll('.ap-gallery__item'));
+    var currentItem = link.closest('.ap-gallery__item');
+    var index = items.indexOf(currentItem);
+    openLightbox(gallery, index);
+  }, true);
+
   // ----- Optional click menu -----
   document.addEventListener('click', function(e){
     var t = e.target;
+    
+    // Handle lightbox trigger button in menu
+    if (t.classList.contains('ap-gallery__lightbox-trigger')) {
+      var gallery = t.closest('.ap-gallery');
+      var currentItem = t.closest('.ap-gallery__item');
+      if (gallery && currentItem && gallery.hasAttribute('data-lightbox')) {
+        var items = Array.prototype.slice.call(gallery.querySelectorAll('.ap-gallery__item'));
+        var index = items.indexOf(currentItem);
+        openLightbox(gallery, index);
+        // Close the menu
+        document.querySelectorAll('.ap-gallery__menu.is-open').forEach(function(m){ m.classList.remove('is-open'); });
+        e.preventDefault();
+        return;
+      }
+    }
+    
     if (!t.closest('.ap-gallery__menu') && !t.closest('.ap-gallery__menu-toggle')) {
       document.querySelectorAll('.ap-gallery__menu.is-open').forEach(function(m){ m.classList.remove('is-open'); });
       return;
@@ -290,7 +450,7 @@ CSS;
 })();
 JS;
 
-        wp_register_script( self::HANDLE, false, [], '1.8.0', true );
+        wp_register_script( self::HANDLE, false, [], '2.1.0', true );
         wp_add_inline_script( self::HANDLE, $js );
         wp_enqueue_script( self::HANDLE );
     }
@@ -303,10 +463,28 @@ JS;
         $cycle         = $args['cycle'];        // 'none'|'hourly'|'daily'
         $max_items     = $args['max_items'];    // int
 
-        // 1) Posts in the category
+        // 1) Get the category and all its descendants (children, grandchildren, etc.)
+        $category = get_category_by_slug( $category_slug );
+        if ( ! $category ) return array();
+        
+        $category_ids = array( $category->term_id );
+        
+        // Get all descendant categories using get_terms with child_of parameter for reliability
+        $descendants = get_terms( array(
+            'taxonomy'   => 'category',
+            'child_of'   => $category->term_id,
+            'hide_empty' => false,
+            'fields'     => 'ids'
+        ) );
+        
+        if ( ! empty( $descendants ) && ! is_wp_error( $descendants ) ) {
+            $category_ids = array_merge( $category_ids, $descendants );
+        }
+
+        // 2) Posts in the category and its children
         $post_query = new WP_Query( array(
             'post_type'           => 'post',
-            'category_name'       => $category_slug,
+            'category__in'        => $category_ids,
             'post_status'         => $post_status,
             'posts_per_page'      => -1,
             'no_found_rows'       => true,
@@ -316,7 +494,7 @@ JS;
         if ( empty( $post_query->posts ) ) return array();
         $post_ids = $post_query->posts;
 
-        // 2) Collect attachment IDs
+        // 3) Collect attachment IDs
         $image_ids = array();
         if ( $mode === 'attachment' ) {
             $att_query = new WP_Query( array(
@@ -353,7 +531,7 @@ JS;
 
         if ( empty( $image_ids ) ) return array();
 
-        // 3) Stable shuffle per cycle
+        // 4) Stable shuffle per cycle
         if ( $cycle !== 'none' ) {
             $seed = ( $cycle === 'hourly' ) ? gmdate( 'Y-m-d-H' ) : gmdate( 'Y-m-d' );
             $seed .= '|' . $category_slug . '|' . $mode;
@@ -362,7 +540,7 @@ JS;
             srand();
         }
 
-        // 4) Cap
+        // 5) Cap
         return array_slice( $image_ids, 0, $max_items );
     }
 
@@ -392,6 +570,8 @@ JS;
             'click_menu'     => 'false',
             'mode'           => 'post',      // post | attachment
             'size'           => 'large',
+            'link_thumbnail_to' => 'post',      // post | image
+            'display_meta'   => '',          // EXIF metadata template
 
             // Tiled (advanced)
             'row_height'     => '220',
@@ -426,6 +606,8 @@ JS;
         $click_menu     = filter_var( $atts['click_menu'], FILTER_VALIDATE_BOOLEAN );
         $mode           = ( $atts['mode'] === 'attachment' ) ? 'attachment' : 'post';
         $img_size       = sanitize_key( $atts['size'] );
+        $link_thumbnail_to = ( $atts['link_thumbnail_to'] === 'image' ) ? 'image' : 'post';
+        $display_meta   = trim( $atts['display_meta'] );
 
         // Tiled tuning
         $row_height     = max( 80, intval( $atts['row_height'] ) );
@@ -488,6 +670,10 @@ JS;
         }
 
         $html  = '<div class="' . esc_attr( implode(' ', $classes) ) . '" style="' . esc_attr( $style ) . '"';
+        
+        // Always add lightbox marker - thumbnails should always open in lightbox
+        $html .= ' data-lightbox="true"';
+        
         if ( $layout === 'tiled' ) {
             $html .= ' data-row-height="' . esc_attr( $row_height ) . '"';
             $html .= ' data-last-row="' . esc_attr( $last_row ) . '"';
@@ -505,8 +691,23 @@ JS;
         foreach ( $image_ids as $att_id ) {
             $parent_id   = (int) get_post_field( 'post_parent', $att_id );
             $post_status = ( $parent_id ) ? get_post_status( $parent_id ) : 'publish';
-            $permalink   = $parent_id ? get_permalink( $parent_id ) : wp_get_attachment_url( $att_id );
+            
+            // Determine link URL based on link_thumbnail_to attribute
+            // For thumbnails, we always want lightbox behavior, so we use a placeholder href
+            // The actual lightbox functionality is handled by JavaScript
+            if ( $link_thumbnail_to === 'image' ) {
+                $permalink = '#'; // Placeholder - lightbox will handle the actual image display
+            } else {
+                $permalink = $parent_id ? get_permalink( $parent_id ) : '#';
+            }
+            
             $title       = get_the_title( $parent_id ? $parent_id : $att_id );
+            
+            // Build caption from EXIF metadata if display_meta is set
+            $caption = '';
+            if ( ! empty( $display_meta ) ) {
+                $caption = $this->build_caption_from_exif( $att_id, $display_meta );
+            }
 
             $meta = wp_get_attachment_metadata( $att_id );
             $ar   = ( !empty($meta['width']) && !empty($meta['height']) && $meta['height'] > 0 )
@@ -518,30 +719,54 @@ JS;
                 'decoding' => 'async',
             ) );
 
-            $html .= '<figure class="ap-gallery__item" data-aspect="' . esc_attr( $ar ) . '">';
+            $html .= '<figure class="ap-gallery__item" data-aspect="' . esc_attr( $ar ) . '" data-caption="' . esc_attr( $caption ) . '">';
 
             // --- Conditional linking rules ---
             $user_logged_in = is_user_logged_in();
 
-            if ( $post_status === 'publish' || ( $post_status !== 'publish' && $user_logged_in ) ) {
-                // Show as linked (normal or logged-in draft)
-                $html .= '  <a class="ap-gallery__link ap-focus-outline" href="' . esc_url( $permalink ) . '" aria-label="' . esc_attr( $title ) . '">';
+            // For image links, always show the link (to the image file)
+            // For post links, apply the original logic
+            $should_link = false;
+            if ( $link_thumbnail_to === 'image' ) {
+                $should_link = true;
+            } elseif ( $post_status === 'publish' || ( $post_status !== 'publish' && $user_logged_in ) ) {
+                $should_link = true;
+            }
+
+            if ( $should_link ) {
+                // Show as linked
+                $link_attrs = 'class="ap-gallery__link ap-focus-outline" href="' . esc_url( $permalink ) . '" aria-label="' . esc_attr( $title ) . '"';
+                
+                // Always add the full image URL for lightbox functionality
+                $full_image_url = wp_get_attachment_url( $att_id );
+                $link_attrs .= ' data-full-image="' . esc_url( $full_image_url ) . '"';
+                
+                $html .= '  <a ' . $link_attrs . '>';
                 $html .=        $img;
                 $html .= '  </a>';
             } else {
-                // Show image only, no link (unpublished and visitor not logged in)
+                // Show image only, no link (unpublished post and visitor not logged in)
                 $html .= $img;
             }
 
             // Optional click menu
             if ( $click_menu ) {
                 $file_url = wp_get_attachment_url( $att_id );
+                $post_permalink = $parent_id ? get_permalink( $parent_id ) : '';
+                
                 $html .= '  <span class="ap-gallery__menu-toggle" tabindex="0" aria-label="Open options"></span>';
                 $html .= '  <div class="ap-gallery__menu" role="menu">';
-                $html .= '    <a role="menuitem" href="' . esc_url( $file_url ) . '" target="_blank" rel="noopener">View image</a>';
-                if ( $post_status === 'publish' || ( $post_status !== 'publish' && $user_logged_in ) ) {
-                    $html .= '    <a role="menuitem" href="' . esc_url( $permalink ) . '">Read post about the image</a>';
+                $html .= '    <span class="ap-gallery__menu-label">View:</span>';
+                
+                // Always use lightbox trigger for "Image" option - never expose direct image URLs
+                $html .= '    <button role="menuitem" class="ap-gallery__lightbox-trigger" data-full-image="' . esc_url( $file_url ) . '">Image</button>';
+                
+                // Always show Post link if there's a parent post
+                if ( $post_permalink && ( $post_status === 'publish' || ( $post_status !== 'publish' && $user_logged_in ) ) ) {
+                    $html .= '    <span class="ap-gallery__menu-sep">|</span>';
+                    $html .= '    <a role="menuitem" href="' . esc_url( $post_permalink ) . '">Post</a>';
                 }
+                
                 $html .= '  </div>';
             }
 
@@ -550,6 +775,167 @@ JS;
 
         $html .= '</div>';
         return $html;
+    }
+    
+    /** Build caption from EXIF metadata template */
+    private function build_caption_from_exif( $att_id, $template ) {
+        // Get image metadata (includes EXIF)
+        $meta = wp_get_attachment_metadata( $att_id );
+        if ( empty( $meta ) || empty( $meta['image_meta'] ) ) {
+            return '';
+        }
+        
+        $exif = $meta['image_meta'];
+        $file_path = get_attached_file( $att_id );
+        
+        // Get additional EXIF data not in WordPress metadata
+        $exif_data = [];
+        if ( function_exists( 'exif_read_data' ) && file_exists( $file_path ) ) {
+            $raw_exif = @exif_read_data( $file_path );
+            if ( $raw_exif ) {
+                $exif_data = $raw_exif;
+            }
+        }
+        
+        // Build replacement array
+        $replacements = [];
+        
+        // FileName
+        $replacements['{FileName}'] = basename( $file_path );
+        
+        // Copyright - support default value syntax: {Copyright,Default Value}
+        $copyright_value = ! empty( $exif['copyright'] ) ? $exif['copyright'] : 
+                           ( ! empty( $exif_data['Copyright'] ) ? $exif_data['Copyright'] : '' );
+        $replacements['{Copyright}'] = $copyright_value;
+        
+        // Handle Copyright with default value pattern
+        if ( preg_match( '/\{Copyright,([^}]+)\}/', $template, $matches ) ) {
+            $default_copyright = trim( $matches[1] );
+            $copyright_final = ! empty( $copyright_value ) ? $copyright_value : $default_copyright;
+            $template = str_replace( $matches[0], $copyright_final, $template );
+        }
+        
+        // CameraMake
+        $replacements['{CameraMake}'] = ! empty( $exif['camera'] ) ? $exif['camera'] : 
+                                         ( ! empty( $exif_data['Make'] ) ? $exif_data['Make'] : '' );
+        
+        // CameraModel
+        $replacements['{CameraModel}'] = ! empty( $exif_data['Model'] ) ? $exif_data['Model'] : '';
+        
+        // ISOSpeedRatings (format as ISO-100)
+        $iso = ! empty( $exif_data['ISOSpeedRatings'] ) ? $exif_data['ISOSpeedRatings'] : '';
+        $replacements['{ISOSpeedRatings}'] = $iso ? 'ISO-' . $iso : '';
+        
+        // DateTimeOriginal
+        $replacements['{DateTimeOriginal}'] = ! empty( $exif['created_timestamp'] ) ? 
+                                               date( 'Y-m-d H:i:s', $exif['created_timestamp'] ) : 
+                                               ( ! empty( $exif_data['DateTimeOriginal'] ) ? $exif_data['DateTimeOriginal'] : '' );
+        
+        // FocalLength (convert fraction to mm, e.g., 380/10 = 38mm)
+        $focal = ! empty( $exif['focal_length'] ) ? $exif['focal_length'] : 
+                 ( ! empty( $exif_data['FocalLength'] ) ? $exif_data['FocalLength'] : '' );
+        if ( $focal && strpos( $focal, '/' ) !== false ) {
+            $parts = explode( '/', $focal );
+            if ( count( $parts ) == 2 && $parts[1] != 0 ) {
+                $focal = round( $parts[0] / $parts[1] ) . 'mm';
+            }
+        } elseif ( is_numeric( $focal ) ) {
+            $focal = round( $focal ) . 'mm';
+        }
+        $replacements['{FocalLength}'] = $focal;
+        
+        // ShutterSpeedValue (convert to fraction, e.g., 7321928/1000000 = 1/136s)
+        $shutter = ! empty( $exif['shutter_speed'] ) ? $exif['shutter_speed'] : 
+                   ( ! empty( $exif_data['ExposureTime'] ) ? $exif_data['ExposureTime'] : '' );
+        if ( $shutter && strpos( $shutter, '/' ) !== false ) {
+            $parts = explode( '/', $shutter );
+            if ( count( $parts ) == 2 && $parts[0] != 0 ) {
+                $decimal = $parts[1] / $parts[0];
+                if ( $decimal >= 1 ) {
+                    $shutter = '1/' . round( $decimal ) . 's';
+                } else {
+                    $shutter = round( 1 / $decimal, 1 ) . 's';
+                }
+            }
+        } elseif ( is_numeric( $shutter ) ) {
+            if ( $shutter >= 1 ) {
+                $shutter = round( $shutter, 1 ) . 's';
+            } else {
+                $shutter = '1/' . round( 1 / $shutter ) . 's';
+            }
+        }
+        $replacements['{ShutterSpeedValue}'] = $shutter;
+        
+        // FNumber (format as f/8)
+        $aperture = ! empty( $exif['aperture'] ) ? $exif['aperture'] : 
+                    ( ! empty( $exif_data['FNumber'] ) ? $exif_data['FNumber'] : '' );
+        if ( $aperture && strpos( $aperture, '/' ) !== false ) {
+            $parts = explode( '/', $aperture );
+            if ( count( $parts ) == 2 && $parts[1] != 0 ) {
+                $aperture = 'f/' . round( $parts[0] / $parts[1], 1 );
+            }
+        } elseif ( is_numeric( $aperture ) ) {
+            $aperture = 'f/' . $aperture;
+        }
+        $replacements['{FNumber}'] = $aperture;
+        
+        // GPSLatitude (format as 37° 13′ 0″)
+        $gps_lat = '';
+        if ( ! empty( $exif_data['GPSLatitude'] ) && ! empty( $exif_data['GPSLatitudeRef'] ) ) {
+            $gps_lat = $this->format_gps_coordinate( $exif_data['GPSLatitude'], $exif_data['GPSLatitudeRef'] );
+        }
+        $replacements['{GPSLatitude}'] = $gps_lat;
+        
+        // GPSLongitude (format as 112° 59′ 0″)
+        $gps_lon = '';
+        if ( ! empty( $exif_data['GPSLongitude'] ) && ! empty( $exif_data['GPSLongitudeRef'] ) ) {
+            $gps_lon = $this->format_gps_coordinate( $exif_data['GPSLongitude'], $exif_data['GPSLongitudeRef'] );
+        }
+        $replacements['{GPSLongitude}'] = $gps_lon;
+        
+        // LensManufacturer
+        $replacements['{LensManufacturer}'] = ! empty( $exif_data['UndefinedTag:0xA433'] ) ? 
+                                               $exif_data['UndefinedTag:0xA433'] : '';
+        
+        // LensModel
+        $replacements['{LensModel}'] = ! empty( $exif_data['UndefinedTag:0xA434'] ) ? 
+                                        $exif_data['UndefinedTag:0xA434'] : '';
+        
+        // Replace placeholders in template
+        $caption = str_replace( array_keys( $replacements ), array_values( $replacements ), $template );
+        
+        // Clean up: remove empty placeholders and extra separators
+        $caption = preg_replace( '/\{[^}]+\}/', '', $caption ); // Remove unfilled placeholders
+        $caption = preg_replace( '/\s*\|\s*\|/', ' |', $caption ); // Remove double separators
+        $caption = preg_replace( '/^\s*\|\s*/', '', $caption ); // Remove leading separator
+        $caption = preg_replace( '/\s*\|\s*$/', '', $caption ); // Remove trailing separator
+        $caption = trim( $caption );
+        
+        return $caption;
+    }
+    
+    /** Format GPS coordinates to degrees, minutes, seconds */
+    private function format_gps_coordinate( $coordinate, $ref ) {
+        if ( ! is_array( $coordinate ) || count( $coordinate ) < 3 ) {
+            return '';
+        }
+        
+        $degrees = $this->gps_fraction_to_number( $coordinate[0] );
+        $minutes = $this->gps_fraction_to_number( $coordinate[1] );
+        $seconds = $this->gps_fraction_to_number( $coordinate[2] );
+        
+        return round( $degrees ) . '° ' . round( $minutes ) . '′ ' . round( $seconds ) . '″ ' . $ref;
+    }
+    
+    /** Convert GPS fraction to decimal number */
+    private function gps_fraction_to_number( $fraction ) {
+        if ( strpos( $fraction, '/' ) !== false ) {
+            $parts = explode( '/', $fraction );
+            if ( count( $parts ) == 2 && $parts[1] != 0 ) {
+                return $parts[0] / $parts[1];
+            }
+        }
+        return floatval( $fraction );
     }
 }
 

@@ -118,6 +118,9 @@ The plugin now automatically includes images from **all descendant categories** 
 
 ## 🧱 Layout Examples
 
+```text
+[category_image_gallery category_slug="us-national-parks" layout="tiled" row_height="230" tolerance="0.30" panorama_thresh="2.6" min_per_row="1" max_per_row="3" last_row="left" gutter="4" v_gutter="4" include_draft="true" click_menu="true" display_meta="{FocalLength} | {FNumber} | {ShutterSpeedValue} | {ISOSpeedRatings} -- {Copyright,Richard Cox}"]
+```
 **Tiled (Jetpack-style justified layout)**  
 Balances rows automatically based on image aspect ratios.
 
